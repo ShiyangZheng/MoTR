@@ -21,64 +21,36 @@ jobs:
       - name: Checkout 🛎️
         uses: actions/checkout@v4
 
-      - name: Locate package.json
-        id: find-pkg
-        run: |
-          cd ${{ matrix.folder }}
-          if [ -f "package.json" ]; then
-            echo "PKG_PATH=$(realpath package.json)" >> $GITHUB_OUTPUT
-            echo "HAS_LOCK=$( [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ] || [ -f yarn.lock ] && echo "true" || echo "false" )" >> $GITHUB_OUTPUT
-          else
-            echo "PKG_PATH=none" >> $GITHUB_OUTPUT
-            echo "HAS_LOCK=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Set up Node.js
-        if: steps.find-pkg.outputs.PKG_PATH != 'none'
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18  # 固定版本避免兼容问题
-          cache: ${{ steps.find-pkg.outputs.HAS_LOCK == 'true' && 'npm' || '' }}
+          node-version: '18'  # 使用稳定的LTS版本
+          cache: 'npm'  # 自动缓存node_modules
 
-      - name: Install dependencies
-        if: steps.find-pkg.outputs.PKG_PATH != 'none'
+      - name: Install and Build 🔧
         run: |
           cd ${{ matrix.folder }}
-          if [ -f "package-lock.json" ]; then
-            npm ci
-          elif [ -f "yarn.lock" ]; then
-            yarn install --frozen-lockfile
+          # 检查是否存在lock文件
+          if [ -f "package-lock.json" ] || [ -f "yarn.lock" ]; then
+            npm ci --no-audit
           else
-            npm install
+            npm install --no-audit
           fi
-
-      - name: Build
-        if: steps.find-pkg.outputs.PKG_PATH != 'none'
-        run: |
-          cd ${{ matrix.folder }}
           npm run build
 
-      - name: Verify dist directory
-        if: steps.find-pkg.outputs.PKG_PATH != 'none'
+      - name: Verify Build Output
         run: |
-          cd ${{ matrix.folder }}
-          if [ ! -d "dist" ]; then
+          if [ ! -d "${{ matrix.folder }}/dist" ]; then
             echo "::error::Build failed to create dist directory in ${{ matrix.folder }}"
             exit 1
           fi
 
       - name: Deploy to shiyangzheng.github.io 🚀
-        if: steps.find-pkg.outputs.PKG_PATH != 'none'
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          repository-name: shiyangzheng/shiyangzheng.github.io
-          branch: main
+          repository-name: shiyangzheng/shiyangzheng.github.io  # 你的目标仓库
+          branch: main  # 或 gh-pages，根据你的Pages设置
           folder: ${{ matrix.folder }}/dist
-          target-folder: MoTR/${{ matrix.folder }}
+          target-folder: MoTR/${{ matrix.folder }}  # 保持原有路径结构
           token: ${{ secrets.GITHUB_TOKEN }}
-          clean: false
-
-      - name: Skip empty folders
-        if: steps.find-pkg.outputs.PKG_PATH == 'none'
-        run: |
-          echo "Skipping ${{ matrix.folder }} - no package.json found"
+          clean: false  # 保留目标仓库其他文件
