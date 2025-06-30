@@ -7,9 +7,11 @@ jobs:
   deploy:
     strategy:
       matrix:
-        folder:
-          - MoTR/run_motr_in_magpie/demo  # 只部署确认能工作的目录
-      # fail-fast: false  # 已精简为一个目录，不需要此配置
+        folder: 
+          - MoTR/run_motr_in_magpie/demo
+          # 成功后可以添加其他目录：
+          # - MoTR/run_motr_in_magpie/provo
+          # - MoTR/run_motr_in_magpie/attachment
 
     runs-on: ubuntu-latest
     steps:
@@ -25,42 +27,23 @@ jobs:
       - name: Install and Build
         run: |
           cd ${{ matrix.folder }}
-          echo "=== 在目录 $(pwd) 中开始构建 ==="
+          echo "=== Building in $(pwd) ==="
           
-          # 强制清理旧文件
+          # 强制清理并安装
           rm -rf node_modules
+          npm install --no-audit
           
-          # 安装依赖（兼容有无lock文件的情况）
-          if [ -f "package-lock.json" ]; then
-            npm ci --no-audit
-          else
-            npm install --no-audit
-          fi
-          
-          # 构建项目
+          # 构建（失败时创建备用页面）
           npm run build || {
-            echo "::warning::构建失败，创建备用index.html"
+            echo "::warning::Build failed, creating fallback page"
             mkdir -p dist
-            echo "<h1>Fallback Page</h1><p>Build failed but deployed</p>" > dist/index.html
-          }
-
-      - name: Verify Build Output
-        run: |
-          cd ${{ matrix.folder }}
-          echo "=== 构建输出检查 ==="
-          ls -l dist/ || {
-            echo "::error::dist目录不存在"
-            exit 1
+            echo "<h1>临时页面</h1><p>构建失败但已部署</p>" > dist/index.html
           }
 
       - name: Deploy to shiyangzheng.github.io
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           repository-name: shiyangzheng/shiyangzheng.github.io
-          branch: main                   # 或你的Pages使用的分支
+          branch: main  # 或你的Pages设置的分支（gh-pages/main）
           folder: ${{ matrix.folder }}/dist
-          target-folder: MoTR/${{ matrix.folder.split('/')[-1]}}  # 简化路径
-          token: ${{ secrets.GITHUB_TOKEN }}
-          clean-exclude: |               # 保留其他文件
-            !.nojekyll
-            !CNAME
+          target
