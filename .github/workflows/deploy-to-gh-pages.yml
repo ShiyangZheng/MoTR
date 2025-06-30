@@ -1,4 +1,4 @@
-name: Deploy Vue.js MoTR Project
+name: Deploy MoTR Project
 on:
   push:
     branches: [main, master]
@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        folder: ["MoTR/run_motr_in_magpie/demo"]  # 根据实际需要添加其他目录
+        folder: ["MoTR/run_motr_in_magpie/demo"]
 
     steps:
       - name: Checkout code
@@ -17,40 +17,39 @@ jobs:
       - name: Setup Node.js 16
         uses: actions/setup-node@v4
         with:
-          node-version: '16.x'  # 严格匹配package.json要求
+          node-version: '16.x'
           cache: 'npm'
 
       - name: Install dependencies
         run: |
           cd "${{ matrix.folder }}"
-          echo "=== 安装依赖 ==="
-          # 清理并重新安装
+          echo "=== Installing dependencies ==="
           rm -rf node_modules package-lock.json
-          npm install --legacy-peer-deps  # 解决magpie-base的peer依赖问题
-          ls node_modules/magpie-base || {
-            echo "::error::magpie-base安装失败"
+          npm install --legacy-peer-deps
+          if [ ! -d "node_modules/magpie-base" ]; then
+            echo "::error::magpie-base installation failed"
             exit 1
-          }
+          fi
 
       - name: Build project
         run: |
           cd "${{ matrix.folder }}"
-          echo "=== 构建项目 ==="
-          export NODE_OPTIONS=--openssl-legacy-provider  # 解决Node16的SSL问题
+          echo "=== Building project ==="
+          export NODE_OPTIONS=--openssl-legacy-provider
           npm run build || {
-            echo "::warning::构建失败，生成备用页面"
+            echo "::warning::Build failed, creating fallback page"
             mkdir -p dist
-            echo "<h1>临时页面</h1><p>构建失败但已部署</p>" > dist/index.html
+            echo "<h1>Temporary Page</h1><p>Build failed but deployed</p>" > dist/index.html
           }
 
       - name: Verify build output
         run: |
           cd "${{ matrix.folder }}"
-          echo "=== 验证构建输出 ==="
           if [ ! -d "dist" ]; then
-            echo "::error::dist目录不存在"
+            echo "::error::dist directory missing"
             exit 1
           fi
+          echo "Build output contents:"
           ls -l dist/
 
       - name: Deploy to GitHub Pages
@@ -59,8 +58,8 @@ jobs:
           repository-name: shiyangzheng/shiyangzheng.github.io
           branch: main
           folder: "${{ matrix.folder }}/dist"
-          target-folder: "MoTR/demo"  # 与vue.config.js中的publicPath对应
-          token: ${{ secrets.GITHUB_TOKEN }
+          target-folder: "MoTR/demo"
+          token: ${{ secrets.GITHUB_TOKEN }}
           clean-exclude: |
             !.nojekyll
             !CNAME
