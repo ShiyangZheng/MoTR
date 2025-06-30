@@ -1,4 +1,4 @@
-name: Deploy MoTR to My GitHub Pages
+name: Deploy MoTR to GitHub Pages
 on:
   push:
     branches: [main, master]
@@ -7,12 +7,9 @@ jobs:
   deploy:
     strategy:
       matrix:
-        folder: 
-          - MoTR/run_motr_in_magpie/demo
-          # 成功后可以添加其他目录：
-          # - MoTR/run_motr_in_magpie/provo
-          # - MoTR/run_motr_in_magpie/attachment
-
+        # 只部署确认能工作的目录（成功后可以添加其他）
+        folder: ["MoTR/run_motr_in_magpie/demo"]  
+        
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -21,29 +18,51 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: '18'  # 使用LTS版本确保稳定
+          cache: 'npm'        # 自动缓存依赖
 
-      - name: Install and Build
+      - name: Install dependencies
         run: |
-          cd ${{ matrix.folder }}
-          echo "=== Building in $(pwd) ==="
-          
+          cd "${{ matrix.folder }}"
+          echo "=== 正在安装 ${{ matrix.folder }} 的依赖 ==="
           # 强制清理并安装
           rm -rf node_modules
-          npm install --no-audit
-          
-          # 构建（失败时创建备用页面）
-          npm run build || {
-            echo "::warning::Build failed, creating fallback page"
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit
+          else
+            npm install --no-audit
+          fi
+
+      - name: Build project
+        run: |
+          cd "${{ matrix.folder }}"
+          echo "=== 正在构建 ${{ matrix.folder }} ==="
+          # 构建失败时创建备用页面
+          if ! npm run build; then
+            echo "::warning::构建失败，生成备用页面"
             mkdir -p dist
             echo "<h1>临时页面</h1><p>构建失败但已部署</p>" > dist/index.html
-          }
+          fi
 
-      - name: Deploy to shiyangzheng.github.io
+      - name: Verify build output
+        run: |
+          cd "${{ matrix.folder }}"
+          if [ ! -d "dist" ]; then
+            echo "::error::dist 目录不存在"
+            exit 1
+          fi
+          echo "构建输出内容："
+          ls -l dist/
+
+      - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           repository-name: shiyangzheng/shiyangzheng.github.io
-          branch: main  # 或你的Pages设置的分支（gh-pages/main）
-          folder: ${{ matrix.folder }}/dist
-          target
+          branch: main         # 必须与你的Pages设置分支一致
+          folder: "${{ matrix.folder }}/dist"
+          target-folder: "MoTR/demo"  # 固定目标路径
+          token: ${{ secrets.GITHUB_TOKEN }}
+          clean-exclude: |      # 保留重要文件
+            !.nojekyll
+            !CNAME
+            !favicon.ico
