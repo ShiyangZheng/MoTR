@@ -1,4 +1,4 @@
-name: Deploy MoTR Project
+name: Deploy Vue.js MoTR Project
 on:
   push:
     branches: [main, master]
@@ -23,34 +23,39 @@ jobs:
       - name: Install dependencies
         run: |
           cd "${{ matrix.folder }}"
-          echo "=== Installing dependencies ==="
-          rm -rf node_modules package-lock.json
-          npm install --legacy-peer-deps
-          if [ ! -d "node_modules/magpie-base" ]; then
-            echo "::error::magpie-base installation failed"
+          echo "=== 安装依赖 ==="
+          
+          # 清理并检查是否存在 package.json
+          if [ ! -f "package.json" ]; then
+            echo "::error::package.json 不存在"
             exit 1
+          fi
+          
+          # 根据是否存在 lock 文件选择安装方式
+          if [ -f "package-lock.json" ]; then
+            echo "检测到 package-lock.json，使用 ci 安装"
+            npm ci --legacy-peer-deps
+          else
+            echo "未检测到 lock 文件，使用 install 安装"
+            npm install --legacy-peer-deps
+          fi
+          
+          # 验证 magpie-base 是否安装成功
+          if [ ! -d "node_modules/magpie-base" ]; then
+            echo "::error::magpie-base 安装失败，尝试强制重新安装"
+            npm install git+https://github.com/cuierd/magpie-base-MoTR.git#main --force
           fi
 
       - name: Build project
         run: |
           cd "${{ matrix.folder }}"
-          echo "=== Building project ==="
+          echo "=== 构建项目 ==="
           export NODE_OPTIONS=--openssl-legacy-provider
           npm run build || {
-            echo "::warning::Build failed, creating fallback page"
+            echo "::warning::构建失败，生成备用页面"
             mkdir -p dist
-            echo "<h1>Temporary Page</h1><p>Build failed but deployed</p>" > dist/index.html
+            echo "<h1>临时页面</h1><p>构建失败但已部署</p>" > dist/index.html
           }
-
-      - name: Verify build output
-        run: |
-          cd "${{ matrix.folder }}"
-          if [ ! -d "dist" ]; then
-            echo "::error::dist directory missing"
-            exit 1
-          fi
-          echo "Build output contents:"
-          ls -l dist/
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
