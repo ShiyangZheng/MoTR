@@ -18,51 +18,38 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout 🛎️
-        uses: actions/checkout@v2.3.1
+        uses: actions/checkout@v4  # 更新到最新稳定版
 
       - name: Read package.json versions
         uses: skjnldsv/read-package-engines-version-actions@v1.1
         id: versions
         with:
           path: ${{matrix.folder}}
-          fallbackNode: '^12'
-          fallbackNpm: '^6'
+          fallbackNode: '^16'  # 更新默认Node版本
+          fallbackNpm: '^8'
 
       - name: Set up Node.js
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v4  # 更新到v4
         with:
           node-version: ${{ steps.versions.outputs.nodeVersion }}
+          cache: 'npm'  # 使用内置缓存功能替代旧版cache action
 
-      - name: Set up npm
-        run: npm i -g npm@"${{ steps.versions.outputs.npmVersion }}"
-
-      - name: Cache node modules
-        uses: actions/cache@v1
-        env:
-          cache-name: cache-node-modules
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-build-${{ env.cache-name }}-
-            ${{ runner.os }}-build-
-            ${{ runner.os }}-
-
-      - name: Install and Build
-        env:
-          REPO_NAME: ${{ github.event.repository.name }}
+      - name: Install dependencies
         run: |
           cd ${{matrix.folder}}
-          npm install
+          npm ci  # 使用ci代替install确保一致性
+
+      - name: Build
+        run: |
+          cd ${{matrix.folder}}
           npm run build
 
       - name: Deploy to shiyangzheng.github.io 🚀
-        uses: JamesIves/github-pages-deploy-action@4.1.5
+        uses: JamesIves/github-pages-deploy-action@v4  # 更新到v4
         with:
-          # 关键修改：部署到你的个人Pages仓库
           repository-name: shiyangzheng/shiyangzheng.github.io
-          branch: main  # 或 gh-pages，取决于你的Pages设置
+          branch: main
           folder: ${{ matrix.folder }}/dist
-          target-folder: MoTR/${{ matrix.folder }}  # 保持原有路径结构
+          target-folder: MoTR/${{ matrix.folder }}
           token: ${{ secrets.GITHUB_TOKEN }}
-          clean: false  # 保留目标仓库其他文件
+          clean: false
