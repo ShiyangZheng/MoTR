@@ -14,38 +14,62 @@ jobs:
           - MoTR/run_motr_in_magpie/provo
           - MoTR/run_motr_in_magpie/demo
           - MoTR/run_motr_in_magpie/demo-Clara
+      fail-fast: false  # 防止一个失败导致全部取消
 
     runs-on: ubuntu-latest
     steps:
       - name: Checkout 🛎️
-        uses: actions/checkout@v4  # 更新到最新稳定版
+        uses: actions/checkout@v4
 
-      - name: Read package.json versions
-        uses: skjnldsv/read-package-engines-version-actions@v1.1
-        id: versions
-        with:
-          path: ${{matrix.folder}}
-          fallbackNode: '^16'  # 更新默认Node版本
-          fallbackNpm: '^8'
+      - name: Locate package.json
+        id: find-pkg
+        run: |
+          cd ${{ matrix.folder }}
+          if [ -f "package.json" ]; then
+            echo "PKG_PATH=$(realpath package.json)" >> $GITHUB_OUTPUT
+            echo "HAS_LOCK=$( [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ] || [ -f yarn.lock ] && echo "true" || echo "false" )" >> $GITHUB_OUTPUT
+          else
+            echo "PKG_PATH=none" >> $GITHUB_OUTPUT
+            echo "HAS_LOCK=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4  # 更新到v4
+        if: steps.find-pkg.outputs.PKG_PATH != 'none'
+        uses: actions/setup-node@v4
         with:
-          node-version: ${{ steps.versions.outputs.nodeVersion }}
-          cache: 'npm'  # 使用内置缓存功能替代旧版cache action
+          node-version: 18  # 固定版本避免兼容问题
+          cache: ${{ steps.find-pkg.outputs.HAS_LOCK == 'true' && 'npm' || '' }}
 
       - name: Install dependencies
+        if: steps.find-pkg.outputs.PKG_PATH != 'none'
         run: |
-          cd ${{matrix.folder}}
-          npm ci  # 使用ci代替install确保一致性
+          cd ${{ matrix.folder }}
+          if [ -f "package-lock.json" ]; then
+            npm ci
+          elif [ -f "yarn.lock" ]; then
+            yarn install --frozen-lockfile
+          else
+            npm install
+          fi
 
       - name: Build
+        if: steps.find-pkg.outputs.PKG_PATH != 'none'
         run: |
-          cd ${{matrix.folder}}
+          cd ${{ matrix.folder }}
           npm run build
 
+      - name: Verify dist directory
+        if: steps.find-pkg.outputs.PKG_PATH != 'none'
+        run: |
+          cd ${{ matrix.folder }}
+          if [ ! -d "dist" ]; then
+            echo "::error::Build failed to create dist directory in ${{ matrix.folder }}"
+            exit 1
+          fi
+
       - name: Deploy to shiyangzheng.github.io 🚀
-        uses: JamesIves/github-pages-deploy-action@v4  # 更新到v4
+        if: steps.find-pkg.outputs.PKG_PATH != 'none'
+        uses: JamesIves/github-pages-deploy-action@v4
         with:
           repository-name: shiyangzheng/shiyangzheng.github.io
           branch: main
@@ -53,3 +77,8 @@ jobs:
           target-folder: MoTR/${{ matrix.folder }}
           token: ${{ secrets.GITHUB_TOKEN }}
           clean: false
+
+      - name: Skip empty folders
+        if: steps.find-pkg.outputs.PKG_PATH == 'none'
+        run: |
+          echo "Skipping ${{ matrix.folder }} - no package.json found"
