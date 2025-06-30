@@ -13,37 +13,35 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          path: MoTR  # 关键修复：指定检出路径
 
       - name: Setup Node.js 16
         uses: actions/setup-node@v4
         with:
           node-version: '16.x'
-          cache: 'npm'
+          # 移除cache配置避免lock文件检查
 
       - name: Install dependencies
         run: |
           cd "${{ matrix.folder }}"
           echo "=== 安装依赖 ==="
           
-          # 清理并检查是否存在 package.json
-          if [ ! -f "package.json" ]; then
-            echo "::error::package.json 不存在"
-            exit 1
+          # 强制生成新的node_modules
+          rm -rf node_modules
+          
+          # 手动创建package-lock.json如果不存在
+          if [ ! -f "package-lock.json" ]; then
+            echo "生成初始package-lock.json"
+            npm install --package-lock-only --legacy-peer-deps
           fi
           
-          # 根据是否存在 lock 文件选择安装方式
-          if [ -f "package-lock.json" ]; then
-            echo "检测到 package-lock.json，使用 ci 安装"
-            npm ci --legacy-peer-deps
-          else
-            echo "未检测到 lock 文件，使用 install 安装"
-            npm install --legacy-peer-deps
-          fi
+          npm install --legacy-peer-deps
           
-          # 验证 magpie-base 是否安装成功
+          # 验证magpie-base
           if [ ! -d "node_modules/magpie-base" ]; then
-            echo "::error::magpie-base 安装失败，尝试强制重新安装"
-            npm install git+https://github.com/cuierd/magpie-base-MoTR.git#main --force
+            echo "::error::magpie-base安装失败"
+            exit 1
           fi
 
       - name: Build project
