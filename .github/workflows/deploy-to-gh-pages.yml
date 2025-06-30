@@ -1,4 +1,5 @@
-name: Build and Deploy MoTR to shiyangzheng.github.io
+
+name: Build and Deploy
 on:
   push:
     branches:
@@ -7,6 +8,7 @@ on:
 
 jobs:
   build-and-deploy:
+
     strategy:
       matrix:
         folder:
@@ -14,43 +16,59 @@ jobs:
           - MoTR/run_motr_in_magpie/provo
           - MoTR/run_motr_in_magpie/demo
           - MoTR/run_motr_in_magpie/demo-Clara
-      fail-fast: false  # 防止一个失败导致全部取消
 
     runs-on: ubuntu-latest
     steps:
       - name: Checkout 🛎️
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2.3.1
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Read package.json node and npm engines version
+        uses: skjnldsv/read-package-engines-version-actions@v1.1
+        id: versions
         with:
-          node-version: '18'  # 使用稳定的LTS版本
-          cache: 'npm'  # 自动缓存node_modules
+          path: ${{matrix.folder}}
+          fallbackNode: '^12'
+          fallbackNpm: '^6'
+
+      - name: Set up node ${{ steps.versions.outputs.nodeVersion }}
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ steps.versions.outputs.nodeVersion }}
+
+      - name: Set up npm ${{ steps.versions.outputs.npmVersion }}
+        run: npm i -g npm@"${{ steps.versions.outputs.npmVersion }}"
+
+      - name: Cache node modules
+        uses: actions/cache@v1
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: ~/.npm # npm cache files are stored in `~/.npm` on Linux/macOS
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
 
       - name: Install and Build 🔧
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
         run: |
-          cd ${{ matrix.folder }}
-          # 检查是否存在lock文件
-          if [ -f "package-lock.json" ] || [ -f "yarn.lock" ]; then
-            npm ci --no-audit
-          else
-            npm install --no-audit
-          fi
+          cd ${{matrix.folder}}
+          npm install
           npm run build
 
-      - name: Verify Build Output
-        run: |
-          if [ ! -d "${{ matrix.folder }}/dist" ]; then
-            echo "::error::Build failed to create dist directory in ${{ matrix.folder }}"
-            exit 1
-          fi
-
-      - name: Deploy to shiyangzheng.github.io 🚀
-        uses: JamesIves/github-pages-deploy-action@v4
+      - name: Create branch
+        uses: peterjgrainger/action-create-branch@v2.0.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          repository-name: shiyangzheng/shiyangzheng.github.io  # 你的目标仓库
-          branch: main  # 或 gh-pages，根据你的Pages设置
+          branch: gh-pages
+
+      - name: Deploy 🚀
+        uses: JamesIves/github-pages-deploy-action@4.1.5
+        with:
+          branch: gh-pages
           folder: ${{ matrix.folder }}/dist
-          target-folder: MoTR/${{ matrix.folder }}  # 保持原有路径结构
+          target-folder: ${{ matrix.folder }}
           token: ${{ secrets.GITHUB_TOKEN }}
-          clean: false  # 保留目标仓库其他文件
